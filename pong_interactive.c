@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <ncurses.h>
 
 #define HEIGHT 25
 #define WIDTH 80
@@ -16,6 +16,13 @@ typedef struct {
     int score2;
 } GameState;
 
+void init_screen(void) {
+    initscr();
+    noecho();
+    curs_set(0);
+    nodelay(stdscr, TRUE);
+}
+
 GameState init_game(void) {
     GameState g;
     g.ball_x = WIDTH / 2;
@@ -29,12 +36,12 @@ GameState init_game(void) {
     return g;
 }
 
-GameState step_ball(GameState g) {
-    g.ball_y = g.ball_y + g.dy;
-    g.ball_x = g.ball_x + g.dx;
+GameState move_ball(GameState g) {
     if (g.ball_y == 0 || g.ball_y == HEIGHT - 1) {
         g.dy = -g.dy;
     }
+    g.ball_x = g.ball_x + g.dx;
+    g.ball_y = g.ball_y + g.dy;
     return g;
 }
 
@@ -80,85 +87,68 @@ GameState move_paddles(GameState g, int key) {
     return g;
 }
 
-int is_control(int key) {
-    int result = 0;
-    if (key == 'a' || key == 'A' || key == 'z' || key == 'Z' || key == 'k' || key == 'K' || key == 'm' ||
-        key == 'M' || key == ' ') {
-        result = 1;
+void draw_scoreboard(GameState g) {
+    mvaddch(0, WIDTH / 2 - 3, '0' + g.score1 / 10);
+    mvaddch(0, WIDTH / 2 - 2, '0' + g.score1 % 10);
+    mvaddch(0, WIDTH / 2 + 1, '0' + g.score2 / 10);
+    mvaddch(0, WIDTH / 2 + 2, '0' + g.score2 % 10);
+}
+
+void draw_paddles(GameState g) {
+    for (int i = 0; i < PADDLE; i = i + 1) {
+        mvaddch(g.paddle1_y + i, 1, '|');
     }
-    return result;
+    for (int i = 0; i < PADDLE; i = i + 1) {
+        mvaddch(g.paddle2_y + i, WIDTH - 2, '|');
+    }
+}
+
+void draw_frame(GameState g) {
+    clear();
+    mvaddch(g.ball_y, g.ball_x, 'o');
+    draw_scoreboard(g);
+    draw_paddles(g);
+    refresh();
 }
 
 int is_game_over(GameState g) { return g.score1 == WIN_SCORE || g.score2 == WIN_SCORE; }
 
-char score_char(GameState g, int y, int x, char current) {
-    char ch = current;
-    if (y == 0 && x == WIDTH / 2 - 2) {
-        ch = (char)('0' + g.score1 / 10);
-    }
-    if (y == 0 && x == WIDTH / 2 - 1) {
-        ch = (char)('0' + g.score1 % 10);
-    }
-    if (y == 0 && x == WIDTH / 2 + 1) {
-        ch = (char)('0' + g.score2 / 10);
-    }
-    if (y == 0 && x == WIDTH / 2 + 2) {
-        ch = (char)('0' + g.score2 % 10);
-    }
-    return ch;
-}
-
-char cell_char(GameState g, int y, int x) {
-    char ch = ' ';
-    if (y == g.ball_y && x == g.ball_x) {
-        ch = 'o';
-    }
-    ch = score_char(g, y, x, ch);
-    if (x == 1 && y >= g.paddle1_y && y <= g.paddle1_y + PADDLE - 1) {
-        ch = '|';
-    }
-    if (x == WIDTH - 2 && y >= g.paddle2_y && y <= g.paddle2_y + PADDLE - 1) {
-        ch = '|';
-    }
-    return ch;
-}
-
-void render(GameState g) {
-    for (int y = 0; y < HEIGHT; y = y + 1) {
-        for (int x = 0; x < WIDTH; x = x + 1) {
-            putchar(cell_char(g, y, x));
-        }
-        putchar('\n');
-    }
-}
-
-void announce_winner(GameState g) {
+void show_winner(GameState g) {
+    clear();
     if (g.score1 == WIN_SCORE) {
-        printf("Player 1 wins!\n");
+        mvprintw(HEIGHT / 2, WIDTH / 2 - 9, "Player 1 win!!!");
     }
     if (g.score2 == WIN_SCORE) {
-        printf("Player 2 wins!\n");
+        mvprintw(HEIGHT / 2, WIDTH / 2 - 9, "Player 2 win!!!");
     }
+    refresh();
+    napms(5000);
 }
 
 int main(void) {
+    init_screen();
     GameState g = init_game();
     int running = 1;
     while (running) {
-        int key = getchar();
-        if (key == EOF || key == 'q') {
+        int key = getch();
+        if (key == 'q') {
             running = 0;
-        } else if (is_control(key)) {
-            g = step_ball(g);
+        } else {
+            g = move_ball(g);
             g = bounce_paddles(g);
             g = update_score(g);
-            g = move_paddles(g, key);
-            render(g);
             if (is_game_over(g)) {
-                announce_winner(g);
                 running = 0;
+            } else {
+                g = move_paddles(g, key);
+                draw_frame(g);
+                napms(50);
             }
         }
     }
+    if (is_game_over(g)) {
+        show_winner(g);
+    }
+    endwin();
     return 0;
 }
